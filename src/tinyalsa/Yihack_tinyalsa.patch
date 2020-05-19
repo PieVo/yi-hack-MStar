@@ -1,6 +1,6 @@
 diff -X exclude_file -uarN tinyalsa-1.0.0_org/Makefile tinyalsa-1.0.0/Makefile
 --- tinyalsa-1.0.0_org/Makefile	2020-04-02 20:01:35.165291305 +0000
-+++ tinyalsa-1.0.0/Makefile	2020-04-02 19:58:59.682826872 +0000
++++ tinyalsa-1.0.0/Makefile	2020-05-19 20:23:42.797284997 +0000
 @@ -10,13 +10,13 @@
  all:
  	$(MAKE) -C src
@@ -26,7 +26,7 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/Makefile tinyalsa-1.0.0/Makefile
  
 diff -X exclude_file -uarN tinyalsa-1.0.0_org/include/tinyalsa/pcm.h tinyalsa-1.0.0/include/tinyalsa/pcm.h
 --- tinyalsa-1.0.0_org/include/tinyalsa/pcm.h	2016-10-02 02:37:39.000000000 +0000
-+++ tinyalsa-1.0.0/include/tinyalsa/pcm.h	2020-04-03 08:25:32.564096737 +0000
++++ tinyalsa-1.0.0/include/tinyalsa/pcm.h	2020-05-19 20:23:42.798284995 +0000
 @@ -218,6 +218,7 @@
                       unsigned int flags, struct pcm_config *config);
  int pcm_close(struct pcm *pcm);
@@ -47,7 +47,7 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/include/tinyalsa/pcm.h tinyalsa-1.
  #endif
 diff -X exclude_file -uarN tinyalsa-1.0.0_org/include/tinyalsa/wave.h tinyalsa-1.0.0/include/tinyalsa/wave.h
 --- tinyalsa-1.0.0_org/include/tinyalsa/wave.h	1970-01-01 00:00:00.000000000 +0000
-+++ tinyalsa-1.0.0/include/tinyalsa/wave.h	2020-04-03 08:19:39.080292941 +0000
++++ tinyalsa-1.0.0/include/tinyalsa/wave.h	2020-05-19 20:23:42.799284993 +0000
 @@ -0,0 +1,31 @@
 +#ifndef WAVE_H
 +#define WAVE_H
@@ -82,12 +82,13 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/include/tinyalsa/wave.h tinyalsa-1
 +#endif
 diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
 --- tinyalsa-1.0.0_org/src/pcm.c	2016-10-02 02:37:39.000000000 +0000
-+++ tinyalsa-1.0.0/src/pcm.c	2020-04-07 14:35:12.539167955 +0000
-@@ -34,12 +34,15 @@
++++ tinyalsa-1.0.0/src/pcm.c	2020-05-19 20:28:52.904604536 +0000
+@@ -34,12 +34,16 @@
  #include <errno.h>
  #include <unistd.h>
  #include <poll.h>
 +#include <signal.h>
++#include <pthread.h>
  
  #include <sys/ioctl.h>
  #include <sys/mman.h>
@@ -99,7 +100,7 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
  
  #include <linux/ioctl.h>
  #define __force
-@@ -48,10 +51,14 @@
+@@ -48,10 +52,14 @@
  #include <sound/asound.h>
  
  #include <tinyalsa/asoundlib.h>
@@ -114,7 +115,7 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
  static inline int param_is_mask(int p)
  {
      return (p >= SNDRV_PCM_HW_PARAM_FIRST_MASK) &&
-@@ -186,6 +193,11 @@
+@@ -186,6 +194,11 @@
      unsigned int subdevice;
  };
  
@@ -126,7 +127,7 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
  /** Gets the buffer size of the PCM.
   * @param pcm A PCM handle.
   * @return The buffer size of the PCM.
-@@ -556,12 +568,15 @@
+@@ -556,12 +569,15 @@
              pcm->prepared = 0;
              pcm->running = 0;
              if (errno == EPIPE) {
@@ -143,7 +144,7 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
          return 0;
      }
  }
-@@ -764,6 +779,9 @@
+@@ -764,6 +780,9 @@
      pcm->running = 0;
      pcm->buffer_size = 0;
      pcm->fd = -1;
@@ -153,7 +154,7 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
      free(pcm);
      return 0;
  }
-@@ -928,6 +946,16 @@
+@@ -928,6 +947,16 @@
  #endif
  
      pcm->underruns = 0;
@@ -170,7 +171,7 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
      return pcm;
  
  fail:
-@@ -1244,3 +1272,106 @@
+@@ -1244,3 +1273,129 @@
      return pcm->pcm_delay;
  }
  
@@ -185,9 +186,22 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
 +    return 0;
 +}
 +
++void* fifo_open_thread(void *data)
++{
++    int fd;
++    char *fifo_name = data;
++
++    fd = open(fifo_name, O_RDONLY);
++    usleep(250);
++    close(fd);
++
++    return NULL;
++}
++
 +int pcm_create_snoop_fifo(struct pcm *pcm)
 +{
 +    char *fifo = "/tmp/audio_fifo";
++    pthread_t open_thread;
 +
 +    if (mkfifo(fifo, 0666) < 0) {
 +        if (errno != EEXIST) {
@@ -196,9 +210,19 @@ diff -X exclude_file -uarN tinyalsa-1.0.0_org/src/pcm.c tinyalsa-1.0.0/src/pcm.c
 +        }    
 +    } 
 +
++    if(pthread_create(&open_thread, NULL, fifo_open_thread, fifo)) {
++        oops(pcm, errno, "Error creating thread\n");
++        return -1;
++    }
++
 +    snoop_fd = open(fifo, O_WRONLY);
 +    if (snoop_fd <= 0) {
 +        oops(pcm, errno, "cannot open snoop fifo");
++        return -1;
++    }
++
++    if(pthread_join(open_thread, NULL)) {
++        oops(pcm, errno, "Failed to join unblocking thread");
 +        return -1;
 +    }
 +
