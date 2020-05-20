@@ -35,6 +35,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <signal.h>
+#include <pthread.h>
 
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -965,7 +966,6 @@ struct pcm *pcm_open(unsigned int card, unsigned int device,
 
     pcm->underruns = 0;
     for (i = 0; i < FIFO_COUNT; i++) {
-	printf("Creating audio fifo %d\n", i);
         if (pcm_create_snoop_fifo(pcm, i) != 0)
         {
                 printf("Error creating fifo\n");  
@@ -1303,9 +1303,22 @@ int pcm_is_xrun(struct pcm *pcm)
     return 0;
 }
 
+void* fifo_open_thread(void *data)
+{
+    int fd;
+    char *fifo_name = data;
+
+    fd = open(fifo_name, O_RDONLY);
+    usleep(250);
+    close(fd);
+
+    return NULL;
+}
+
 int pcm_create_snoop_fifo(struct pcm *pcm, unsigned int id)
 {
     char fifo_name[32];
+    pthread_t open_thread;
 
     sprintf(fifo_name, "%s_%d", FIFO_NAME, id);
     if (mkfifo(fifo_name, 0666) < 0) {
@@ -1315,9 +1328,19 @@ int pcm_create_snoop_fifo(struct pcm *pcm, unsigned int id)
         }    
     } 
 
+    if(pthread_create(&open_thread, NULL, fifo_open_thread, fifo_name)) {
+        fprintf(stderr, "Error creating thread\n");
+        return -1;
+    }
+
     snoop_fd[id] = open(fifo_name, O_WRONLY);
     if (snoop_fd[id] <= 0) {
         oops(pcm, errno, "cannot open snoop fifo");
+        return -1;
+    }
+
+    if(pthread_join(open_thread, NULL)) {
+        oops(pcm, errno, "Failed to join unblocking thread");
         return -1;
     }
 
