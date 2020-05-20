@@ -338,8 +338,8 @@ void print_usage(char *progname)
     fprintf(stderr, "\nUsage: %s [-r RES] [-p PORT] [-d]\n\n", progname);
     fprintf(stderr, "\t-r RES, --resolution RES\n");
     fprintf(stderr, "\t\tset resolution: low, high or both (default high)\n");
-    fprintf(stderr, "\t-a RES, --audio RES\n");
-    fprintf(stderr, "\t\tenable/disable audio for specific resolution: low, high or none (default none)\n");
+    fprintf(stderr, "\t-a, --audio\n");
+    fprintf(stderr, "\t\tenable/disable audio (default off)\n");
     fprintf(stderr, "\t-p PORT, --port PORT\n");
     fprintf(stderr, "\t\tset TCP port (default 554)\n");
     fprintf(stderr, "\t-d,     --debug\n");
@@ -378,7 +378,7 @@ int main(int argc, char** argv)
         static struct option long_options[] =
         {
             {"resolution",  required_argument, 0, 'r'},
-            {"audio",  required_argument, 0, 'a'},
+            {"audio",  no_argument, 0, 'a'},
             {"port",  required_argument, 0, 'p'},
             {"debug",  no_argument, 0, 'd'},
             {"help",  no_argument, 0, 'h'},
@@ -387,7 +387,7 @@ int main(int argc, char** argv)
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "r:a:p:dh",
+        c = getopt_long (argc, argv, "r:p:adh",
                          long_options, &option_index);
 
         /* Detect the end of the options. */
