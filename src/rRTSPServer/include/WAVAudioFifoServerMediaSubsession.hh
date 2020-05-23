@@ -25,18 +25,16 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #ifndef _FILE_SERVER_MEDIA_SUBSESSION_HH
 #include "FileServerMediaSubsession.hh"
 #endif
+#include "StreamReplicator.hh"
 
-class WAVAudioFifoServerMediaSubsession: public FileServerMediaSubsession{
+class WAVAudioFifoServerMediaSubsession: public OnDemandServerMediaSubsession {
 public:
   static WAVAudioFifoServerMediaSubsession*
-  createNew(UsageEnvironment& env, char const* fileName, Boolean reuseFirstSource,
-	    Boolean convertToULaw = False, unsigned int noiseReductionLevel = 0);
-      // If "convertToULaw" is True, 16-bit audio streams are converted to
-      // 8-bit u-law audio prior to streaming.
+  createNew(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource);
 
 protected:
-  WAVAudioFifoServerMediaSubsession(UsageEnvironment& env, char const* fileName,
-				    Boolean reuseFirstSource, Boolean convertToULaw, unsigned int noiseReductionLevel);
+  WAVAudioFifoServerMediaSubsession(UsageEnvironment& env, StreamReplicator* replicator,
+				    Boolean reuseFirstSource);
       // called only by createNew();
   virtual ~WAVAudioFifoServerMediaSubsession();
 
@@ -54,7 +52,6 @@ protected: // redefined virtual functions
   virtual float duration() const;
 
 protected:
-  Boolean fConvertToULaw;
 
   // The following parameters of the input stream are set after
   // "createNewStreamSource" is called:
@@ -63,7 +60,8 @@ protected:
   unsigned fSamplingFrequency;
   unsigned fNumChannels;
   float fFileDuration;
-  unsigned int fNoiseReductionLevel;
+  StreamReplicator* fReplicator;
+  Boolean fConvertToULaw;
 };
 
 #endif

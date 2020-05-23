@@ -26,19 +26,14 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #include "YiNoiseReduction.hh"
 
 WAVAudioFifoServerMediaSubsession* WAVAudioFifoServerMediaSubsession
-::createNew(UsageEnvironment& env, char const* fileName, Boolean reuseFirstSource,
-	    Boolean convertToULaw, unsigned int noiseReductionLevel) {
-  return new WAVAudioFifoServerMediaSubsession(env, fileName,
-					       reuseFirstSource, convertToULaw, noiseReductionLevel);
+::createNew(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource) {
+  return new WAVAudioFifoServerMediaSubsession(env, replicator, reuseFirstSource );
 }
 
 WAVAudioFifoServerMediaSubsession
-::WAVAudioFifoServerMediaSubsession(UsageEnvironment& env, char const* fileName,
-				    Boolean reuseFirstSource, Boolean convertToULaw,
-				    unsigned int noiseReductionLevel)
-  : FileServerMediaSubsession(env, fileName, reuseFirstSource),
-    fConvertToULaw(convertToULaw),
-    fNoiseReductionLevel(noiseReductionLevel) {
+::WAVAudioFifoServerMediaSubsession(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource)
+  : OnDemandServerMediaSubsession(env, reuseFirstSource),
+    fReplicator(replicator) {
 }
 
 WAVAudioFifoServerMediaSubsession
@@ -100,58 +95,30 @@ void WAVAudioFifoServerMediaSubsession
 FramedSource* WAVAudioFifoServerMediaSubsession
 ::createNewStreamSource(unsigned /*clientSessionId*/, unsigned& estBitrate) {
   FramedSource* resultSource = NULL;
-  FramedSource* intermediateSource = NULL;
-  do {
-    WAVAudioFifoSource* wavSource = WAVAudioFifoSource::createNew(envir(), fFileName);
-    if (wavSource == NULL) break;
-
-    // Get attributes of the audio source:
-
-    fAudioFormat = wavSource->getAudioFormat();
-    fBitsPerSample = wavSource->bitsPerSample();
-    // We handle only 4,8,16,20,24 bits-per-sample audio:
-    if (fBitsPerSample%4 != 0 || fBitsPerSample < 4 || fBitsPerSample > 24 || fBitsPerSample == 12) {
-      envir() << "The input file contains " << fBitsPerSample << " bit-per-sample audio, which we don't handle\n";
-      break;
-    }
-    fSamplingFrequency = wavSource->samplingFrequency();
-    fNumChannels = wavSource->numChannels();
+  //WAVAudioFifoSource* originalSource = (WAVAudioFifoSource*)fReplicator->inputSource();
+  resultSource = fReplicator->createStreamReplica();
+  if (resultSource == NULL) {
+    printf("Failed to create stream replica\n");
+    Medium::close(resultSource);
+    return NULL;
+  }
+  else {
+    fAudioFormat = WA_PCM; //originalSource->getAudioFormat();
+    fBitsPerSample = 16;//originalSource->bitsPerSample();
+    fSamplingFrequency = 16000;//originalSource->samplingFrequency();
+    fConvertToULaw = True;
+    fNumChannels = 1;
     unsigned bitsPerSecond = fSamplingFrequency*fBitsPerSample*fNumChannels;
-
-    fFileDuration = (float)((8.0*wavSource->numPCMBytes())/(fSamplingFrequency*fNumChannels*fBitsPerSample));
-
-    // Add in any filter necessary to transform the data prior to streaming:
-    resultSource = wavSource; // by default
-    if (fAudioFormat == WA_PCM) {
-      if (fBitsPerSample == 16) {
-	// If a value of 0 is provided, noise reduction is not used
-        if (fNoiseReductionLevel > 0) {
-          intermediateSource = YiNoiseReduction::createNew(envir(), wavSource, fNoiseReductionLevel);
-        } else {
-          intermediateSource = wavSource;
-        }
-        // Note that samples in the WAV audio file are in little-endian order.
-	if (fConvertToULaw) {
-	  // Add a filter that converts from raw 16-bit PCM audio to 8-bit u-law audio:
-	  resultSource = uLawFromPCMAudioSource::createNew(envir(), intermediateSource, 1/*little-endian*/);
-	  bitsPerSecond /= 2;
-	} else {
-	  // Add a filter that converts from little-endian to network (big-endian) order:
-	  resultSource = EndianSwap16::createNew(envir(), intermediateSource);
-	}
-      } else if (fBitsPerSample == 20 || fBitsPerSample == 24) {
-	// Add a filter that converts from little-endian to network (big-endian) order:
-	resultSource = EndianSwap24::createNew(envir(), wavSource);
-      }
-    }
+    printf("Original source FMT: %d bps: %d freq: %d\n", fAudioFormat, fBitsPerSample, fSamplingFrequency);
+    fFileDuration = ~0;//(float)((8.0*originalSource->numPCMBytes())/(fSamplingFrequency*fNumChannels*fBitsPerSample));
 
     estBitrate = (bitsPerSecond+500)/1000; // kbps
-    return resultSource;
-  } while (0);
 
-  // An error occurred:
-  Medium::close(resultSource);
-  return NULL;
+    if (fConvertToULaw)
+        estBitrate /= 2;
+
+    return resultSource;
+  }
 }
 
 RTPSink* WAVAudioFifoServerMediaSubsession
@@ -210,7 +177,7 @@ RTPSink* WAVAudioFifoServerMediaSubsession
     } else { //unknown format
       break;
     }
-
+    printf("Create SimpleRTPSink: %s, freq: %d, channels %d\n", mimeType, fSamplingFrequency, fNumChannels);
     return SimpleRTPSink::createNew(envir(), rtpGroupsock,
 				    payloadFormatCode, fSamplingFrequency,
 				    "audio", mimeType, fNumChannels);
