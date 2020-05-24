@@ -33,7 +33,6 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #define  WA_IMA_ADPCM 0x11
 #define  WA_UNKNOWN 0x12
 
-
 class WAVAudioFifoSource: public AudioInputDevice {
 public:
 

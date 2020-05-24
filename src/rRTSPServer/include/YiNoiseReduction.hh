@@ -37,7 +37,7 @@ public:
 
 protected:
   YiNoiseReduction(UsageEnvironment& env, FramedSource* inputSource, unsigned int level);
-      // called only by createNew()
+  // called only by createNew()
   virtual ~YiNoiseReduction();
 
 private:
@@ -57,6 +57,5 @@ private:
 			  struct timeval presentationTime,
 			  unsigned durationInMicroseconds);
 };
-
 
 #endif

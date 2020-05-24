@@ -30,11 +30,11 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 class WAVAudioFifoServerMediaSubsession: public OnDemandServerMediaSubsession {
 public:
   static WAVAudioFifoServerMediaSubsession*
-  createNew(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource);
+  createNew(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource, Boolean convertToULaw);
 
 protected:
   WAVAudioFifoServerMediaSubsession(UsageEnvironment& env, StreamReplicator* replicator,
-				    Boolean reuseFirstSource);
+				    Boolean reuseFirstSource, Boolean convertToULaw);
       // called only by createNew();
   virtual ~WAVAudioFifoServerMediaSubsession();
 

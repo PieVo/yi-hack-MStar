@@ -26,14 +26,15 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #include "YiNoiseReduction.hh"
 
 WAVAudioFifoServerMediaSubsession* WAVAudioFifoServerMediaSubsession
-::createNew(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource) {
-  return new WAVAudioFifoServerMediaSubsession(env, replicator, reuseFirstSource );
+::createNew(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource, Boolean convertToULaw) {
+  return new WAVAudioFifoServerMediaSubsession(env, replicator, reuseFirstSource, convertToULaw);
 }
 
 WAVAudioFifoServerMediaSubsession
-::WAVAudioFifoServerMediaSubsession(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource)
+::WAVAudioFifoServerMediaSubsession(UsageEnvironment& env, StreamReplicator* replicator, Boolean reuseFirstSource, Boolean convertToULaw)
   : OnDemandServerMediaSubsession(env, reuseFirstSource),
-    fReplicator(replicator) {
+    fReplicator(replicator),
+    fConvertToULaw(convertToULaw) {
 }
 
 WAVAudioFifoServerMediaSubsession
@@ -95,7 +96,22 @@ void WAVAudioFifoServerMediaSubsession
 FramedSource* WAVAudioFifoServerMediaSubsession
 ::createNewStreamSource(unsigned /*clientSessionId*/, unsigned& estBitrate) {
   FramedSource* resultSource = NULL;
-  //WAVAudioFifoSource* originalSource = (WAVAudioFifoSource*)fReplicator->inputSource();
+  WAVAudioFifoSource* originalSource = NULL;
+
+  // The amount of filters depends on wheter noise reduction is enabled
+  FramedFilter* filterSource1 = (FramedFilter*)fReplicator->inputSource();
+  // Source of endian-swap or uLaw filter
+  FramedFilter* filterSource2 = (FramedFilter*)filterSource1->inputSource();
+  // Source of noise reduction filter
+  FramedFilter* filterSource3 = (FramedFilter*)filterSource2->inputSource();
+
+  if (((WAVAudioFifoSource*)(filterSource2))->bitsPerSample() != 0) {
+      originalSource = (WAVAudioFifoSource*)(filterSource2);
+  } else {
+      originalSource = (WAVAudioFifoSource*)(filterSource3);
+  }
+  
+  printf("fReplicator->inputSource() = %p\n", originalSource);
   resultSource = fReplicator->createStreamReplica();
   if (resultSource == NULL) {
     printf("Failed to create stream replica\n");
@@ -103,11 +119,11 @@ FramedSource* WAVAudioFifoServerMediaSubsession
     return NULL;
   }
   else {
-    fAudioFormat = WA_PCM; //originalSource->getAudioFormat();
-    fBitsPerSample = 16;//originalSource->bitsPerSample();
-    fSamplingFrequency = 16000;//originalSource->samplingFrequency();
+    fAudioFormat = originalSource->getAudioFormat();
+    fBitsPerSample = originalSource->bitsPerSample();
+    fSamplingFrequency = originalSource->samplingFrequency();
     fConvertToULaw = True;
-    fNumChannels = 1;
+    fNumChannels = originalSource->numChannels();
     unsigned bitsPerSecond = fSamplingFrequency*fBitsPerSample*fNumChannels;
     printf("Original source FMT: %d bps: %d freq: %d\n", fAudioFormat, fBitsPerSample, fSamplingFrequency);
     fFileDuration = ~0;//(float)((8.0*originalSource->numPCMBytes())/(fSamplingFrequency*fNumChannels*fBitsPerSample));

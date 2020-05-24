@@ -64,14 +64,42 @@ Boolean reuseFirstSource = True;
 // change the following "False" to "True":
 Boolean iFramesOnly = False;
 
-void startReplicatorStream(StreamReplicator* replicator) {
-  // Begin by creating an input stream from our replicator:
-  FramedSource* source = replicator->createStreamReplica();
-  // Then create a 'dummy sink' object to receive thie replica stream:
-  MediaSink* sink = DummySink::createNew(*env, "dummy");
+StreamReplicator* startReplicatorStream(const char* inputAudioFileName, Boolean convertToULaw, unsigned int nr_level) {
+    // Create a single WAVAudioFifo source that will be replicated for mutliple streams
+    WAVAudioFifoSource* wavSource = WAVAudioFifoSource::createNew(*env, inputAudioFileName);
+    if (wavSource == NULL) {
+        *env << "Failed to create Fifo Source \n";
+    }
+    printf("wavSource = %p\n", wavSource);
+    // Optionally enable the noise reduction filter
+    FramedSource* intermediateSource;
+    if (nr_level > 0) {
+        intermediateSource = YiNoiseReduction::createNew(*env, wavSource, nr_level);
+    } else {
+        intermediateSource = wavSource;
+    }
 
-  // Now, start playing, feeding the sink object from the source:
-  sink->startPlaying(*source, NULL, NULL);
+    // Optionally convert to uLaw pcm
+    FramedSource* resultSource;
+    if (convertToULaw) {
+        resultSource = uLawFromPCMAudioSource::createNew(*env, intermediateSource, 1/*little-endian*/);
+    } else {
+        resultSource = EndianSwap16::createNew(*env, intermediateSource);
+    }
+
+    // Create and start the replicator that will be given to each subsession
+    StreamReplicator* replicator = StreamReplicator::createNew(*env, resultSource);
+    
+    // Begin by creating an input stream from our replicator:
+    FramedSource* source = replicator->createStreamReplica();
+    
+    // Then create a 'dummy sink' object to receive thie replica stream:
+    MediaSink* sink = DummySink::createNew(*env, "dummy");
+
+    // Now, start playing, feeding the sink object from the source:
+    sink->startPlaying(*source, NULL, NULL);
+
+    return replicator;
 }
 
 void cb_dest_memcpy(cb_output_buffer *dest, unsigned char *src, size_t n)
@@ -599,19 +627,8 @@ int main(int argc, char** argv)
         // access to the server.
     }
 
-    WAVAudioFifoSource* wavSource = WAVAudioFifoSource::createNew(*env, inputAudioFileName);
-    if (wavSource == NULL) {
-        *env << "Failed to create Fifo Source \n";	   
-    }
-
-    FramedSource* intermediateSource = YiNoiseReduction::createNew(*env, wavSource, nr_level);
-    if (convertToULaw) {
-    }
-
-    FramedSource* resultSource = uLawFromPCMAudioSource::createNew(*env, intermediateSource, 1/*little-endian*/);
-    //FramedSource* resultSource = EndianSwap16::createNew(envir(), intermediateSource);
-    StreamReplicator* replicator = StreamReplicator::createNew(*env, resultSource);
-    startReplicatorStream(replicator);
+    // Create and start the replicator that will be given to each subsession
+    StreamReplicator* replicator = startReplicatorStream(inputAudioFileName, convertToULaw, nr_level);
 
     // Create the RTSP server:
     RTSPServer* rtspServer = RTSPServer::createNew(*env, port, authDB);
@@ -642,7 +659,7 @@ int main(int argc, char** argv)
                                    ::createNew(*env, &output_buffer_high, reuseFirstSource));
         if (audio == RESOLUTION_HIGH) {
             sms_high->addSubsession(WAVAudioFifoServerMediaSubsession
-                                   ::createNew(*env, replicator, reuseFirstSource));
+                                   ::createNew(*env, replicator, reuseFirstSource, convertToULaw));
         }
         rtspServer->addServerMediaSession(sms_high);
 
@@ -664,7 +681,7 @@ int main(int argc, char** argv)
                                    ::createNew(*env, &output_buffer_low, reuseFirstSource));
         if (audio == RESOLUTION_LOW) {
             sms_low->addSubsession(WAVAudioFifoServerMediaSubsession
-                                   ::createNew(*env, replicator, reuseFirstSource));
+                                   ::createNew(*env, replicator, reuseFirstSource, convertToULaw));
         }
         rtspServer->addServerMediaSession(sms_low);
 
@@ -682,7 +699,7 @@ int main(int argc, char** argv)
             = ServerMediaSession::createNew(*env, streamName, streamName,
                                               descriptionString);
         sms_audio->addSubsession(WAVAudioFifoServerMediaSubsession
-                                   ::createNew(*env, replicator, reuseFirstSource));
+                                   ::createNew(*env, replicator, reuseFirstSource, convertToULaw));
         rtspServer->addServerMediaSession(sms_audio);
 
         announceStream(rtspServer, sms_audio, streamName, audio);
